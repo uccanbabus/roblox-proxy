@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 
 app.post('/publish', async (req, res) => {
-    console.log("🚀 İstek geldi, Fetch ve Content-Length doğrulaması yapılıyor...");
+    console.log("🚀 İstek geldi, URL düzeltmesi ile Roblox'a iletiliyor...");
     
     const { apiKey, universeId, placeId, fileData } = req.body;
 
@@ -13,9 +13,13 @@ app.post('/publish', async (req, res) => {
     }
 
     try {
-        const robloxUrl = `https://apis.roblox.com/universes/v1/universes/${universeId}/places/${placeId}/versions?versionType=Published`;
+        // 🔥 İŞTE KESİN ÇÖZÜM: Fazladan yazılan /universes/ kelimesi kaldırıldı!
+        const robloxUrl = `https://apis.roblox.com/universes/v1/${universeId}/places/${placeId}/versions?versionType=Published`;
+        
         const binaryBuffer = Buffer.from(fileData, 'utf-8');
         const contentLength = binaryBuffer.length;
+
+        console.log(`📦 Gönderiliyor -> Universe: ${universeId}, Place: ${placeId}, Boyut: ${contentLength} byte`);
 
         const response = await fetch(robloxUrl, {
             method: 'POST',
@@ -29,11 +33,9 @@ app.post('/publish', async (req, res) => {
             body: binaryBuffer
         });
 
-        // 🔥 İŞTE DEĞİŞİKLİK: Cevabı JSON olarak değil, ham metin (Text) olarak alıyoruz
         const resText = await response.text();
         console.log("📥 Roblox'tan Gelen Ham Cevap:", resText);
 
-        // Metni güvenli bir şekilde JSON'a çevirmeyi deniyoruz
         let resData;
         try {
             resData = JSON.parse(resText);
@@ -42,10 +44,10 @@ app.post('/publish', async (req, res) => {
         }
 
         if (response.ok) {
-            console.log("✅ İşlem Başarılı!");
-            res.status(200).json({ success: true, data: resData });
+            console.log("✅ İŞLEM TAMAMEN BAŞARILI! Harita yüklendi.");
+            res.status(200).json({ success: true, versionNumber: resData.versionNumber || "Yüklendi" });
         } else {
-            console.error("❌ Roblox Reddetti. Durum Kodu:", response.status);
+            console.error(`❌ Roblox API Hatası (${response.status}):`, resText);
             res.status(response.status).json({ success: false, error: resData });
         }
 
