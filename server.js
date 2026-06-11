@@ -1,11 +1,10 @@
 const express = require('express');
-const axios = require('axios');
 const app = express();
 
 app.use(express.json({ limit: '50mb' }));
 
 app.post('/publish', async (req, res) => {
-    console.log("🚀 İstek geldi, veri Binary Buffer'a dönüştürülüyor...");
+    console.log("🚀 İstek geldi, Fetch ve Content-Length doğrulaması yapılıyor...");
     
     const { apiKey, universeId, placeId, fileData } = req.body;
 
@@ -16,31 +15,40 @@ app.post('/publish', async (req, res) => {
     try {
         const robloxUrl = `https://apis.roblox.com/universes/v1/universes/${universeId}/places/${placeId}/versions?versionType=Published`;
         
-        // 🔥 İŞTE SİHİRLİ DOKUNUŞ: Yazıyı ham binary veriye çeviriyoruz.
-        // Akamai artık bu verinin içini okuyup "XML saldırısı" diyemeyecek.
+        // Veriyi tam bir binary Buffer'a çeviriyoruz
         const binaryBuffer = Buffer.from(fileData, 'utf-8');
 
-        const response = await axios.post(robloxUrl, binaryBuffer, {
+        // 🔥 AKAMAI'YI YIKACAK SATIR: Verinin tam boyutunu byte olarak hesaplıyoruz
+        const contentLength = binaryBuffer.length;
+
+        console.log(`📦 Gönderilecek Harita Boyutu: ${contentLength} byte`);
+
+        // Axios yerine Akamai'nin başlıklarını bozamadığı yerleşik fetch kullanıyoruz
+        const response = await fetch(robloxUrl, {
+            method: 'POST',
             headers: {
                 'x-api-key': apiKey,
                 'Content-Type': 'application/octet-stream',
+                'Content-Length': contentLength.toString(), // Akamai'nin zorunlu tuttuğu boyut
                 'User-Agent': 'RobloxStudio/WinInet',
-                'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive'
-            }
+            },
+            body: binaryBuffer
         });
 
-        console.log("✅ KORUMA AŞILDI! Roblox yüklemeyi onayladı.");
-        res.status(200).json({ success: true, versionNumber: response.data.versionNumber });
-    } catch (error) {
-        console.error("❌ Roblox API/WAF Hatası:");
-        if (error.response) {
-            console.error(JSON.stringify(error.response.data));
-            res.status(500).json({ success: false, error: error.response.data });
+        const resData = await response.json();
+
+        if (response.ok) {
+            console.log("✅ KORUMA TAMAMEN AŞILDI! Roblox yüklemeyi onayladı.");
+            res.status(200).json({ success: true, versionNumber: resData.versionNumber });
         } else {
-            console.error(error.message);
-            res.status(500).json({ success: false, error: error.message });
+            console.error("❌ Roblox API Hatası:", JSON.stringify(resData));
+            res.status(response.status).json({ success: false, error: resData });
         }
+
+    } catch (error) {
+        console.error("❌ Sunucu içi hata:", error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
