@@ -14,35 +14,38 @@ app.post('/publish', async (req, res) => {
 
     try {
         const robloxUrl = `https://apis.roblox.com/universes/v1/universes/${universeId}/places/${placeId}/versions?versionType=Published`;
-        
-        // Veriyi tam bir binary Buffer'a çeviriyoruz
         const binaryBuffer = Buffer.from(fileData, 'utf-8');
-
-        // 🔥 AKAMAI'YI YIKACAK SATIR: Verinin tam boyutunu byte olarak hesaplıyoruz
         const contentLength = binaryBuffer.length;
 
-        console.log(`📦 Gönderilecek Harita Boyutu: ${contentLength} byte`);
-
-        // Axios yerine Akamai'nin başlıklarını bozamadığı yerleşik fetch kullanıyoruz
         const response = await fetch(robloxUrl, {
             method: 'POST',
             headers: {
                 'x-api-key': apiKey,
                 'Content-Type': 'application/octet-stream',
-                'Content-Length': contentLength.toString(), // Akamai'nin zorunlu tuttuğu boyut
+                'Content-Length': contentLength.toString(),
                 'User-Agent': 'RobloxStudio/WinInet',
                 'Connection': 'keep-alive'
             },
             body: binaryBuffer
         });
 
-        const resData = await response.json();
+        // 🔥 İŞTE DEĞİŞİKLİK: Cevabı JSON olarak değil, ham metin (Text) olarak alıyoruz
+        const resText = await response.text();
+        console.log("📥 Roblox'tan Gelen Ham Cevap:", resText);
+
+        // Metni güvenli bir şekilde JSON'a çevirmeyi deniyoruz
+        let resData;
+        try {
+            resData = JSON.parse(resText);
+        } catch (e) {
+            resData = { rawResponse: resText };
+        }
 
         if (response.ok) {
-            console.log("✅ KORUMA TAMAMEN AŞILDI! Roblox yüklemeyi onayladı.");
-            res.status(200).json({ success: true, versionNumber: resData.versionNumber });
+            console.log("✅ İşlem Başarılı!");
+            res.status(200).json({ success: true, data: resData });
         } else {
-            console.error("❌ Roblox API Hatası:", JSON.stringify(resData));
+            console.error("❌ Roblox Reddetti. Durum Kodu:", response.status);
             res.status(response.status).json({ success: false, error: resData });
         }
 
